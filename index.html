@@ -1,0 +1,286 @@
+<!DOCTYPE html>
+<html lang="ko" data-theme="light">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Whee Music - 음악 전문 라이브 스트리밍</title>
+  <link rel="stylesheet" href="style.css?v=1.1">
+  <!-- flv.js for ultra low latency live streaming -->
+  <script src="https://cdn.jsdelivr.net/npm/flv.js@1.6.2/dist/flv.min.js"></script>
+</head>
+<body>
+
+  <!-- Header -->
+  <header>
+    <div class="logo" id="logo-btn">
+      Whee <span>Music</span>
+    </div>
+    <div class="header-actions" style="position: relative;">
+      <!-- Theme Toggle Button -->
+      <button class="icon-btn" id="theme-toggle" title="화면 모드 전환">
+        <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="feather feather-moon"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path></svg>
+      </button>
+      
+      <!-- Dynamic Auth Container -->
+      <div id="header-auth-area"></div>
+
+      <!-- Profile Dropdown Menu -->
+      <div class="dropdown-menu" id="profile-dropdown">
+        <div class="dropdown-header">
+          <span id="dropdown-username">로그인 필요</span>
+          <span id="dropdown-userrole" class="user-role-badge">리스너</span>
+        </div>
+        <div class="dropdown-divider"></div>
+        <a href="#" class="dropdown-item">🎫 내 공연 티켓 보관함</a>
+        <a href="#" class="dropdown-item">🎵 신청곡 보관함</a>
+        <a href="#" class="dropdown-item" id="streamer-studio-btn">🎙️ 내 방송국 (스트리머 전환)</a>
+        <a href="#" class="dropdown-item">⚙️ 계정 설정</a>
+        <div class="dropdown-divider"></div>
+        <a href="#" class="dropdown-item logout-btn" id="logout-btn">로그아웃</a>
+      </div>
+    </div>
+  </header>
+
+  <main class="container">
+    
+    <!-- LOBBY VIEW -->
+    <section id="lobby-view" class="view-section active">
+      <div class="lobby-header">
+        <div class="lobby-title">
+          <h1>라이브 스트리밍</h1>
+          <p>음악가들의 실시간 공연과 연주를 감상해 보세요.</p>
+        </div>
+        <div class="genre-filters">
+          <button class="genre-chip active" data-genre="all">전체</button>
+          <button class="genre-chip" data-genre="acoustic">어쿠스틱</button>
+          <button class="genre-chip" data-genre="band">밴드</button>
+          <button class="genre-chip" data-genre="electronic">일렉트로닉/DJ</button>
+          <button class="genre-chip" data-genre="jazz">재즈</button>
+        </div>
+      </div>
+
+      <div class="stream-grid" id="stream-grid">
+        <!-- Stream Cards will be loaded dynamically via JS -->
+      </div>
+    </section>
+
+    <!-- LIVE ROOM VIEW -->
+    <section id="live-view" class="view-section">
+      <div class="live-layout">
+        
+        <!-- Main Stage (Video Player & Controls) -->
+        <div class="main-stage">
+          <div class="video-container" id="video-player">
+            <!-- Actual HTML5 Video element for streaming -->
+            <video id="video-element" autoplay muted playsinline style="width: 100%; height: 100%; object-fit: cover; display: none;"></video>
+
+            <!-- Visualizer Placeholder simulating music broadcast -->
+            <div class="visualizer-overlay" id="visualizer-placeholder">
+              <div class="visualizer-bar"></div>
+              <div class="visualizer-bar"></div>
+              <div class="visualizer-bar"></div>
+              <div class="visualizer-bar"></div>
+              <div class="visualizer-bar"></div>
+            </div>
+            <div class="live-badge">LIVE</div>
+          </div>
+
+          <div class="stream-info-bar">
+            <div class="stream-info-main">
+              <div class="artist-details">
+                <h2 id="live-artist-name">아티스트 이름</h2>
+                <p id="live-stream-title">방송 제목이 여기에 들어갑니다.</p>
+              </div>
+              <div class="stream-actions">
+                <button class="secondary-btn" id="back-to-lobby">
+                  로비로 돌아가기
+                </button>
+                <button class="primary-btn" id="ticket-sponsor-btn">
+                  공연 티켓 후원
+                </button>
+              </div>
+            </div>
+          </div>
+
+          <!-- Audio Mixer Panel (Music Platform Special Feature) -->
+          <div class="mixer-panel">
+            <div class="mixer-header">멀티트랙 오디오 믹서 (데모)</div>
+            <div class="mixer-controls">
+              <div class="mixer-channel">
+                <div class="channel-label">
+                  <span>보컬 마이크</span>
+                  <span id="vol-vocal-val">80%</span>
+                </div>
+                <input type="range" class="channel-slider" id="vol-vocal" min="0" max="100" value="80">
+              </div>
+              <div class="mixer-channel">
+                <div class="channel-label">
+                  <span>악기 세션</span>
+                  <span id="vol-inst-val">70%</span>
+                </div>
+                <input type="range" class="channel-slider" id="vol-inst" min="0" max="100" value="70">
+              </div>
+              <div class="mixer-channel">
+                <div class="channel-label">
+                  <span>MR (반주)</span>
+                  <span id="vol-mr-val">60%</span>
+                </div>
+                <input type="range" class="channel-slider" id="vol-mr" min="0" max="100" value="60">
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Sidebar (Chatting / Song Request Queue) -->
+        <div class="sidebar">
+          <div class="sidebar-tabs">
+            <button class="tab-btn active" id="tab-chat">실시간 채팅</button>
+            <button class="tab-btn" id="tab-request">신청곡 대기열 (<span id="queue-count">0</span>)</button>
+          </div>
+
+          <div class="sidebar-content">
+            
+            <!-- Chat Panel -->
+            <div class="tab-panel active" id="panel-chat">
+              <div class="chat-messages" id="chat-box">
+                <!-- Chat Bubbles loaded dynamically -->
+              </div>
+              <form class="chat-input-area" id="chat-form">
+                <input type="text" id="chat-input" placeholder="메시지를 입력하세요..." autocomplete="off">
+                <button type="submit" class="primary-btn">전송</button>
+              </form>
+            </div>
+
+            <!-- Song Request Panel -->
+            <div class="tab-panel" id="panel-request">
+              <div class="request-list" id="request-list">
+                <!-- Song Requests loaded dynamically -->
+              </div>
+              
+              <!-- Viewer Song Request UI -->
+              <form class="request-action-area" id="request-form">
+                <div>
+                  <select id="request-song-select">
+                    <!-- Dynamic Streamer Song List loaded -->
+                  </select>
+                </div>
+                <div style="display: flex; gap: 0.5rem;">
+                  <input type="text" id="request-sponsor-msg" placeholder="아티스트에게 전할 응원 한 마디..." autocomplete="off">
+                  <button type="submit" class="primary-btn" style="white-space: nowrap;">곡 신청</button>
+                </div>
+              </form>
+            </div>
+
+          </div>
+        </div>
+
+      </div>
+    </section>
+
+    <!-- STREAMER STUDIO VIEW -->
+    <section id="streamer-view" class="view-section">
+      <div class="lobby-header" style="margin-bottom: 2rem; border-bottom: 1px solid var(--border-color); padding-bottom: 1rem;">
+        <div class="lobby-title">
+          <h1>스트리머 스튜디오</h1>
+          <p>내 음악 방송국을 모니터링하고 실시간 신청곡 큐를 제어합니다.</p>
+        </div>
+        <div>
+          <button class="secondary-btn" id="exit-streamer-btn">스튜디오 나가기</button>
+        </div>
+      </div>
+
+      <div class="live-layout">
+        <!-- Left Panel: Broadcast Status -->
+        <div class="main-stage">
+          <div class="video-container" style="aspect-ratio: 16/9; background-color: var(--bg-secondary); border: 1px solid var(--border-color); display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 1rem;">
+            <div class="visualizer-overlay" style="height: 40px; justify-content: center;">
+              <div class="visualizer-bar"></div>
+              <div class="visualizer-bar"></div>
+              <div class="visualizer-bar"></div>
+              <div class="visualizer-bar"></div>
+              <div class="visualizer-bar"></div>
+            </div>
+            <span id="studio-stream-status-text" style="font-size: 0.9rem; font-weight: 500; color: var(--text-secondary);">방송 송출 준비 완료 (오프라인)</span>
+          </div>
+
+          <div class="stream-info-bar">
+            <div class="stream-info-main" style="display: block;">
+              <div class="form-group" style="margin-bottom: 1.5rem;">
+                <label style="font-size: 0.8rem; font-weight: 700; color: var(--text-secondary);">방송 제목 설정</label>
+                <input type="text" id="studio-stream-title" style="width: 100%; background-color: var(--bg-secondary); border: 1px solid var(--border-color); color: var(--text-primary); padding: 0.6rem 0.75rem; font-size: 0.9rem; margin-top: 0.5rem; outline: none;" value="조용한 밤, 마음에 위로가 되는 통기타 라이브">
+              </div>
+              <button class="primary-btn w-full" id="studio-broadcast-toggle" style="padding: 0.75rem;">방송 시작하기</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Right Panel: Requests Dashboard -->
+        <div class="sidebar">
+          <div class="sidebar-tabs" style="border-bottom: 1px solid var(--border-color);">
+            <div style="flex: 1; padding: 1rem 0; font-size: 0.85rem; font-weight: 600; text-align: center; color: var(--text-primary);">
+              신청곡 관리판 (<span id="studio-queue-count">0</span>)
+            </div>
+          </div>
+          <div class="sidebar-content">
+            <div class="request-list" id="studio-request-list">
+              <!-- Dynamically loaded in app.js -->
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+  </main>
+
+  <!-- Auth Modal -->
+  <div class="modal-backdrop" id="auth-modal">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h3 id="modal-title">로그인</h3>
+        <button class="icon-btn" id="modal-close" title="닫기">&times;</button>
+      </div>
+      <div class="modal-body">
+        
+        <!-- Login Form -->
+        <form id="login-form" class="auth-form active">
+          <div class="form-group">
+            <label for="login-username">아이디</label>
+            <input type="text" id="login-username" required autocomplete="username">
+          </div>
+          <div class="form-group">
+            <label for="login-password">비밀번호</label>
+            <input type="password" id="login-password" required autocomplete="current-password">
+          </div>
+          <button type="submit" class="primary-btn w-full">로그인</button>
+          <div class="auth-switch-prompt">
+            아직 회원이 아니신가요? <a href="#" id="switch-to-signup">회원가입</a>
+          </div>
+        </form>
+
+        <!-- Signup Form -->
+        <form id="signup-form" class="auth-form">
+          <div class="form-group">
+            <label for="signup-username">아이디</label>
+            <input type="text" id="signup-username" required autocomplete="username">
+          </div>
+          <div class="form-group">
+            <label for="signup-nickname">닉네임 (활동명)</label>
+            <input type="text" id="signup-nickname" required>
+          </div>
+          <div class="form-group">
+            <label for="signup-password">비밀번호</label>
+            <input type="password" id="signup-password" required autocomplete="new-password">
+          </div>
+          <button type="submit" class="primary-btn w-full">가입하기</button>
+          <div class="auth-switch-prompt">
+            이미 계정이 있으신가요? <a href="#" id="switch-to-login">로그인</a>
+          </div>
+        </form>
+        
+      </div>
+    </div>
+  </div>
+
+  <script src="app.js?v=1.2"></script>
+</body>
+</html>
