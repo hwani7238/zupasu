@@ -248,8 +248,8 @@ nms.on('postPublish', (id, StreamPath, args) => {
   // StreamPath format is usually /Live/streamerId or /live/streamerId
   if (parts.length >= 3 && parts[1].toLowerCase() === 'live') {
     const streamerId = parts[2];
-    // By default, allow requests when a stream starts
-    activeStreams.set(streamerId, { allowRequests: true });
+    // By default, allow requests and set a default title
+    activeStreams.set(streamerId, { allowRequests: true, title: "실시간 음악 방송 송출 중" });
     console.log(`[Stream Started] Streamer "${streamerId}" is now LIVE with requests enabled.`);
   }
 });
@@ -268,7 +268,7 @@ nms.on('donePublish', (id, StreamPath, args) => {
 app.get('/api/streams/active', (req, res) => {
   const list = [];
   activeStreams.forEach((val, key) => {
-    list.push({ id: key, allowRequests: val.allowRequests });
+    list.push({ id: key, allowRequests: val.allowRequests, title: val.title });
   });
   res.json({ activeStreams: list });
 });
@@ -284,11 +284,29 @@ app.post('/api/streams/:id/allow-requests', (req, res) => {
     activeStreams.set(streamerId, info);
   } else {
     // If stream offline but setting is changed, save it anyway
-    activeStreams.set(streamerId, { allowRequests: !!allowRequests });
+    activeStreams.set(streamerId, { allowRequests: !!allowRequests, title: "실시간 음악 방송" });
   }
   
   console.log(`[Stream Config] Streamer "${streamerId}" updated allowRequests to ${!!allowRequests}`);
   res.json({ success: true, allowRequests: !!allowRequests });
+});
+
+// API to mock/start broadcast directly from web UI
+app.post('/api/streams/:id/broadcast', (req, res) => {
+  const streamerId = req.params.id;
+  const { isBroadcasting, title } = req.body;
+  
+  if (isBroadcasting) {
+    const info = activeStreams.get(streamerId) || { allowRequests: true };
+    info.title = title || "실시간 라이브 방송";
+    activeStreams.set(streamerId, info);
+    console.log(`[Mock Stream Started] Streamer "${streamerId}" is now LIVE with title: ${info.title}`);
+  } else {
+    activeStreams.delete(streamerId);
+    console.log(`[Mock Stream Ended] Streamer "${streamerId}" is now OFFLINE.`);
+  }
+  
+  res.json({ success: true, isLive: isBroadcasting });
 });
 
 // Start Server first, then try initializing DB and RTMP Media Server in background

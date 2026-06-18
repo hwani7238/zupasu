@@ -428,13 +428,27 @@ function setupEventListeners() {
   exitStreamerBtn.addEventListener('click', exitStreamerStudio);
 
   // Toggle Broadcast (Start/Stop)
-  studioBroadcastToggle.addEventListener('click', () => {
+  studioBroadcastToggle.addEventListener('click', async () => {
     isBroadcasting = !isBroadcasting;
     const monitorBox = document.querySelector('#streamer-view .video-container');
+    const title = studioStreamTitleInput.value.trim();
+
+    // Sync broadcast state to backend
+    if (activeStreamer) {
+      try {
+        await fetch(`/api/streams/${activeStreamer.id}/broadcast`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ isBroadcasting, title })
+        });
+      } catch (err) {
+        console.error('방송 상태 동기화 실패:', err);
+      }
+    }
     
     if (isBroadcasting) {
       monitorBox.classList.remove('offline');
-      studioStreamStatusText.textContent = `송출 중 (실시간 연결 성공) - ${studioStreamTitleInput.value}`;
+      studioStreamStatusText.textContent = `송출 중 (실시간 연결 성공) - ${title}`;
       studioBroadcastToggle.textContent = '방송 종료하기';
       studioBroadcastToggle.style.backgroundColor = 'var(--danger-color)';
       studioBroadcastToggle.style.borderColor = 'var(--danger-color)';
@@ -589,6 +603,9 @@ function startLiveRoomPolling(streamerId) {
     const streamInfo = activeStreams.find(s => s.id === streamerId);
     if (streamInfo) {
       toggleRequestTab(streamInfo.allowRequests);
+      if (streamInfo.title) {
+        document.getElementById('live-stream-title').textContent = streamInfo.title;
+      }
     } else {
       toggleRequestTab(false);
     }
@@ -612,7 +629,10 @@ async function loadStreams(genreFilter) {
     : STREAMERS.filter(s => s.genre === genreFilter);
 
   filtered.forEach(stream => {
-    const isLive = activeStreams.some(s => s.id === stream.id);
+    const activeStreamInfo = activeStreams.find(s => s.id === stream.id);
+    const isLive = !!activeStreamInfo;
+    const displayTitle = (isLive && activeStreamInfo.title) ? activeStreamInfo.title : stream.title;
+
     const card = document.createElement('div');
     card.className = `stream-card ${isLive ? 'is-live' : 'is-offline'}`;
     card.innerHTML = `
@@ -628,7 +648,7 @@ async function loadStreams(genreFilter) {
           <span class="card-genre">${stream.genre}</span>
           <span class="card-artist">${stream.artist}</span>
         </div>
-        <div class="card-title">${stream.title}</div>
+        <div class="card-title">${displayTitle}</div>
       </div>
     `;
     card.addEventListener('click', () => enterLiveRoom(stream));
@@ -690,7 +710,6 @@ async function enterLiveRoom(stream) {
   liveView.classList.add('active');
 
   liveArtistName.textContent = stream.artist;
-  liveStreamTitle.textContent = stream.title;
 
   // Clear and setup song request select box
   requestSongSelect.innerHTML = '<option value="" disabled selected>신청할 곡을 골라보세요...</option>';
@@ -714,13 +733,15 @@ async function enterLiveRoom(stream) {
   // Start simulation chat generator
   startChatSimulation();
 
-  // Initial request tab setup and start polling
+  // Initial request tab and title setup, then start polling
   const activeStreams = await fetchActiveStreams();
   const streamInfo = activeStreams.find(s => s.id === stream.id);
   if (streamInfo) {
     toggleRequestTab(streamInfo.allowRequests);
+    liveStreamTitle.textContent = streamInfo.title || stream.title;
   } else {
     toggleRequestTab(false);
+    liveStreamTitle.textContent = stream.title;
   }
   startLiveRoomPolling(stream.id);
 }
