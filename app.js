@@ -92,7 +92,6 @@ const streamGrid = document.getElementById('stream-grid');
 const lobbyView = document.getElementById('lobby-view');
 const liveView = document.getElementById('live-view');
 const backToLobbyBtn = document.getElementById('back-to-lobby');
-const ticketSponsorBtn = document.getElementById('ticket-sponsor-btn');
 
 const liveArtistName = document.getElementById('live-artist-name');
 const liveStreamTitle = document.getElementById('live-stream-title');
@@ -318,12 +317,6 @@ function setupEventListeners() {
     }
   });
 
-  // Direct Sponsor Button Click
-  ticketSponsorBtn.addEventListener('click', () => {
-    const amount = '₩' + (Math.floor(Math.random() * 5) * 5000 + 5000).toLocaleString();
-    const nickname = currentUser ? currentUser.nickname : '나 (후원)';
-    addChatMessage(nickname, `공연 라이브 티켓을 후원했습니다.`, true, false, amount);
-  });
 
   // Modal Control Event Listeners
   modalCloseBtn.addEventListener('click', closeAuthModal);
