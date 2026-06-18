@@ -238,8 +238,8 @@ app.delete('/api/streams/:id/requests/:requestId', async (req, res) => {
   }
 });
 
-// Global store for active RTMP streams
-const activeStreams = new Set();
+// Global store for active RTMP streams with metadata (e.g. allowRequests)
+const activeStreams = new Map();
 
 // Node Media Server Event Handlers
 nms.on('postPublish', (id, StreamPath, args) => {
@@ -248,8 +248,9 @@ nms.on('postPublish', (id, StreamPath, args) => {
   // StreamPath format is usually /Live/streamerId or /live/streamerId
   if (parts.length >= 3 && parts[1].toLowerCase() === 'live') {
     const streamerId = parts[2];
-    activeStreams.add(streamerId);
-    console.log(`[Stream Started] Streamer "${streamerId}" is now LIVE.`);
+    // By default, allow requests when a stream starts
+    activeStreams.set(streamerId, { allowRequests: true });
+    console.log(`[Stream Started] Streamer "${streamerId}" is now LIVE with requests enabled.`);
   }
 });
 
@@ -265,7 +266,29 @@ nms.on('donePublish', (id, StreamPath, args) => {
 
 // API to get active streams
 app.get('/api/streams/active', (req, res) => {
-  res.json({ activeStreams: Array.from(activeStreams) });
+  const list = [];
+  activeStreams.forEach((val, key) => {
+    list.push({ id: key, allowRequests: val.allowRequests });
+  });
+  res.json({ activeStreams: list });
+});
+
+// API to toggle song requests for a stream
+app.post('/api/streams/:id/allow-requests', (req, res) => {
+  const streamerId = req.params.id;
+  const { allowRequests } = req.body;
+  
+  if (activeStreams.has(streamerId)) {
+    const info = activeStreams.get(streamerId);
+    info.allowRequests = !!allowRequests;
+    activeStreams.set(streamerId, info);
+  } else {
+    // If stream offline but setting is changed, save it anyway
+    activeStreams.set(streamerId, { allowRequests: !!allowRequests });
+  }
+  
+  console.log(`[Stream Config] Streamer "${streamerId}" updated allowRequests to ${!!allowRequests}`);
+  res.json({ success: true, allowRequests: !!allowRequests });
 });
 
 // Start Server first, then try initializing DB and RTMP Media Server in background

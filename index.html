@@ -95,9 +95,6 @@
                 <button class="secondary-btn" id="back-to-lobby">
                   로비로 돌아가기
                 </button>
-                <button class="primary-btn" id="ticket-sponsor-btn">
-                  공연 티켓 후원
-                </button>
               </div>
             </div>
           </div>
@@ -208,6 +205,10 @@
               <div class="form-group" style="margin-bottom: 1.5rem;">
                 <label style="font-size: 0.8rem; font-weight: 700; color: var(--text-secondary);">방송 제목 설정</label>
                 <input type="text" id="studio-stream-title" style="width: 100%; background-color: var(--bg-secondary); border: 1px solid var(--border-color); color: var(--text-primary); padding: 0.6rem 0.75rem; font-size: 0.9rem; margin-top: 0.5rem; outline: none;" value="조용한 밤, 마음에 위로가 되는 통기타 라이브">
+              </div>
+              <div class="form-group" style="margin-bottom: 1.5rem; display: flex; align-items: center; justify-content: space-between;">
+                <label style="font-size: 0.85rem; font-weight: 500; color: var(--text-primary); cursor: pointer;" for="studio-allow-requests">신청곡 대기열 켜기</label>
+                <input type="checkbox" id="studio-allow-requests" checked style="width: 1.2rem; height: 1.2rem; cursor: pointer; accent-color: var(--accent-color);">
               </div>
               <button class="primary-btn w-full" id="studio-broadcast-toggle" style="padding: 0.75rem;">방송 시작하기</button>
             </div>

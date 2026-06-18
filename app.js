@@ -461,6 +461,21 @@ function setupEventListeners() {
       studioBroadcastToggle.style.borderColor = 'var(--accent-color)';
     }
   });
+
+  // Toggle Song Request status from streamer studio checkbox
+  const studioAllowRequests = document.getElementById('studio-allow-requests');
+  studioAllowRequests.addEventListener('change', async (e) => {
+    if (!activeStreamer) return;
+    try {
+      await fetch(`/api/streams/${activeStreamer.id}/allow-requests`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ allowRequests: e.target.checked })
+      });
+    } catch (err) {
+      console.error(err);
+    }
+  });
 }
 
 // Fetch requests queue from Server/DB
@@ -513,6 +528,53 @@ function stopLobbyPolling() {
   }
 }
 
+// Viewer Request Tab Toggle (Show/Hide based on streamer settings)
+function toggleRequestTab(allowRequests) {
+  const requestTabBtn = document.getElementById('tab-request');
+  const requestPanel = document.getElementById('panel-request');
+  const chatTabBtn = document.getElementById('tab-chat');
+  const chatPanel = document.getElementById('panel-chat');
+  
+  if (allowRequests) {
+    requestTabBtn.style.display = 'block';
+  } else {
+    requestTabBtn.style.display = 'none';
+    
+    // If request tab was currently active, force switch to chat tab
+    if (requestTabBtn.classList.contains('active')) {
+      requestTabBtn.classList.remove('active');
+      chatTabBtn.classList.add('active');
+      requestPanel.classList.remove('active');
+      chatPanel.classList.add('active');
+    }
+  }
+}
+
+// Live Room stream configuration polling (dynamic tab sync)
+let liveRoomInterval = null;
+
+function startLiveRoomPolling(streamerId) {
+  if (liveRoomInterval) return;
+  
+  // Set up periodic poll every 5 seconds
+  liveRoomInterval = setInterval(async () => {
+    const activeStreams = await fetchActiveStreams();
+    const streamInfo = activeStreams.find(s => s.id === streamerId);
+    if (streamInfo) {
+      toggleRequestTab(streamInfo.allowRequests);
+    } else {
+      toggleRequestTab(true);
+    }
+  }, 5000);
+}
+
+function stopLiveRoomPolling() {
+  if (liveRoomInterval) {
+    clearInterval(liveRoomInterval);
+    liveRoomInterval = null;
+  }
+}
+
 // Load Streamers inside lobby
 async function loadStreams(genreFilter) {
   const activeStreams = await fetchActiveStreams();
@@ -523,7 +585,7 @@ async function loadStreams(genreFilter) {
     : STREAMERS.filter(s => s.genre === genreFilter);
 
   filtered.forEach(stream => {
-    const isLive = activeStreams.includes(stream.id);
+    const isLive = activeStreams.some(s => s.id === stream.id);
     const card = document.createElement('div');
     card.className = `stream-card ${isLive ? 'is-live' : 'is-offline'}`;
     card.innerHTML = `
@@ -624,11 +686,25 @@ async function enterLiveRoom(stream) {
   
   // Start simulation chat generator
   startChatSimulation();
+
+  // Initial request tab setup and start polling
+  const activeStreams = await fetchActiveStreams();
+  const streamInfo = activeStreams.find(s => s.id === stream.id);
+  if (streamInfo) {
+    toggleRequestTab(streamInfo.allowRequests);
+  } else {
+    toggleRequestTab(true);
+  }
+  startLiveRoomPolling(stream.id);
 }
 
 // Exit Live Room to lobby
 function exitLiveRoom() {
   activeStreamer = null;
+
+  // Stop polling and reset tab visibility
+  stopLiveRoomPolling();
+  toggleRequestTab(true);
 
   // Clean up flv.js player
   if (flvPlayer) {
@@ -756,6 +832,15 @@ function enterStreamerStudio() {
     id: currentUser.username,
     artist: currentUser.nickname
   };
+
+  // Reset allowRequests checkbox to true on entry and sync with backend
+  const studioAllowRequestsCheckbox = document.getElementById('studio-allow-requests');
+  studioAllowRequestsCheckbox.checked = true;
+  fetch(`/api/streams/${activeStreamer.id}/allow-requests`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ allowRequests: true })
+  }).catch(err => console.error(err));
 
   // Fetch Requests queue from DB
   fetchStreamerRequests();
