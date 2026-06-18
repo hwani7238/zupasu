@@ -270,7 +270,7 @@ app.get('/api/streams/active', (req, res) => {
 
 // Start Server first, then try initializing DB and RTMP Media Server in background
 app.listen(PORT, () => {
-  console.log(`Whee Music web server running at http://localhost:${PORT}`);
+  console.log(`Zupasu web server running at http://localhost:${PORT}`);
   
   // Start RTMP/HTTP-FLV Media Server
   nms.run();

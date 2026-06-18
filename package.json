@@ -1,7 +1,7 @@
 {
-  "name": "whee-music",
+  "name": "zupasu",
   "version": "1.0.0",
-  "description": "Whee Music - Minimalist Music Live Streaming Platform with Supabase & RTMP Media Server",
+  "description": "Zupasu - Minimalist Music Live Streaming Platform with Supabase & RTMP Media Server",
   "main": "server.js",
   "scripts": {
     "start": "node server.js"
