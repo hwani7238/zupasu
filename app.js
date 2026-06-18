@@ -237,14 +237,6 @@ function setupEventListeners() {
     });
   });
 
-  // Mixer Slider Event Listeners
-  ['vocal', 'inst', 'mr'].forEach(channel => {
-    const slider = document.getElementById(`vol-${channel}`);
-    const display = document.getElementById(`vol-${channel}-val`);
-    slider.addEventListener('input', (e) => {
-      display.textContent = `${e.target.value}%`;
-    });
-  });
 
   // Sidebar Tab Switching
   tabChat.addEventListener('click', () => {
