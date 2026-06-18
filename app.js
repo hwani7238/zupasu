@@ -563,7 +563,7 @@ function startLiveRoomPolling(streamerId) {
     if (streamInfo) {
       toggleRequestTab(streamInfo.allowRequests);
     } else {
-      toggleRequestTab(true);
+      toggleRequestTab(false);
     }
   }, 5000);
 }
@@ -693,7 +693,7 @@ async function enterLiveRoom(stream) {
   if (streamInfo) {
     toggleRequestTab(streamInfo.allowRequests);
   } else {
-    toggleRequestTab(true);
+    toggleRequestTab(false);
   }
   startLiveRoomPolling(stream.id);
 }
