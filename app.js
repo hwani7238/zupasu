@@ -514,6 +514,11 @@ let lobbyInterval = null;
 function startLobbyPolling() {
   if (lobbyInterval) return;
   
+  // Load streams immediately on start
+  const activeChip = document.querySelector('.genre-chip.active');
+  const currentGenre = activeChip ? activeChip.dataset.genre : 'all';
+  loadStreams(currentGenre);
+  
   // Set up periodic poll every 5 seconds
   lobbyInterval = setInterval(() => {
     const activeChip = document.querySelector('.genre-chip.active');
