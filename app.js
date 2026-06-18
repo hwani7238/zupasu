@@ -84,6 +84,7 @@ let currentUser = null; // Session management
 let streamerPollInterval = null;
 let isBroadcasting = false; // Mock broadcast state
 let flvPlayer = null; // Real RTMP/HTTP-FLV player instance
+let studioFlvPlayer = null; // Real RTMP/HTTP-FLV player instance for studio monitor
 
 // DOM Elements
 const themeToggleBtn = document.getElementById('theme-toggle');
@@ -134,6 +135,27 @@ const studioStreamStatusText = document.getElementById('studio-stream-status-tex
 const studioStreamTitleInput = document.getElementById('studio-stream-title');
 const studioRequestList = document.getElementById('studio-request-list');
 const studioQueueCount = document.getElementById('studio-queue-count');
+
+// Copy & Key DOM Elements
+const btnCopyRtmp = document.getElementById('btn-copy-rtmp');
+const btnCopyKey = document.getElementById('btn-copy-key');
+const guideRtmpUrl = document.getElementById('guide-rtmp-url');
+const guideStreamKey = document.getElementById('guide-stream-key');
+
+// Studio Sidebar Tabs & Panels DOM Elements
+const studioTabBtnRequest = document.getElementById('studio-tab-btn-request');
+const studioTabBtnChat = document.getElementById('studio-tab-btn-chat');
+const studioTabBtnFollowers = document.getElementById('studio-tab-btn-followers');
+const studioPanelRequest = document.getElementById('studio-panel-request');
+const studioPanelChat = document.getElementById('studio-panel-chat');
+const studioPanelFollowers = document.getElementById('studio-panel-followers');
+const studioFollowersCount = document.getElementById('studio-followers-count');
+const studioFollowersList = document.getElementById('studio-followers-list');
+
+// Follower & Reaction DOM Elements
+const btnFollow = document.getElementById('btn-follow');
+const liveFollowerCount = document.getElementById('live-follower-count');
+const btnChatHeart = document.getElementById('btn-chat-heart');
 
 // Initialize Platform
 document.addEventListener('DOMContentLoaded', () => {
@@ -491,6 +513,83 @@ function setupEventListeners() {
       studioChatInput.value = '';
     });
   }
+
+  // 1. 스튜디오 우측 사이드바 탭 전환 리스너
+  if (studioTabBtnRequest) {
+    studioTabBtnRequest.addEventListener('click', () => updateStudioTabs('request'));
+  }
+  if (studioTabBtnChat) {
+    studioTabBtnChat.addEventListener('click', () => updateStudioTabs('chat'));
+  }
+  if (studioTabBtnFollowers) {
+    studioTabBtnFollowers.addEventListener('click', () => {
+      updateStudioTabs('followers');
+      fetchFollowersList();
+    });
+  }
+
+  // 2. RTMP 송출 연결 주소 & 스트림 키 복사
+  if (btnCopyRtmp) {
+    btnCopyRtmp.addEventListener('click', () => {
+      if (guideRtmpUrl) {
+        navigator.clipboard.writeText(guideRtmpUrl.value)
+          .then(() => alert('RTMP 송출 URL이 복사되었습니다.'))
+          .catch(err => console.error('URL 복사 실패:', err));
+      }
+    });
+  }
+  if (btnCopyKey) {
+    btnCopyKey.addEventListener('click', () => {
+      if (guideStreamKey) {
+        navigator.clipboard.writeText(guideStreamKey.value)
+          .then(() => alert('스트림 키가 복사되었습니다.'))
+          .catch(err => console.error('스트림 키 복사 실패:', err));
+      }
+    });
+  }
+
+  // 3. 이식된 믹서 리스너
+  setupStudioAudioMixer();
+
+  // 4. 하트 리액션 버튼 클릭 시 채팅방에 ❤️ 메시지 전송 및 scale 애니메이션 피드백
+  if (btnChatHeart) {
+    btnChatHeart.addEventListener('click', () => {
+      const nickname = currentUser ? currentUser.nickname : '익명의 리스너';
+      addChatMessage(nickname, '❤️ 하트를 보냈습니다!', false);
+      
+      btnChatHeart.style.transform = 'scale(1.3)';
+      setTimeout(() => {
+        btnChatHeart.style.transform = 'scale(1)';
+      }, 120);
+    });
+  }
+
+  // 5. 팔로우 버튼 클릭 시 동작 및 상태 갱신
+  if (btnFollow) {
+    btnFollow.addEventListener('click', async () => {
+      if (!currentUser) {
+        alert('로그인 후 아티스트를 팔로우할 수 있습니다.');
+        openAuthModal();
+        return;
+      }
+      if (!activeStreamer) return;
+
+      try {
+        const response = await fetch(`/api/streams/${activeStreamer.id}/follow`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ followerId: currentUser.username })
+        });
+
+        if (!response.ok) throw new Error('팔로우 요청 처리에 실패했습니다.');
+        const data = await response.json();
+        
+        updateFollowBtnUI(data.isFollowing, data.count);
+      } catch (err) {
+        alert(err.message);
+      }
+    });
+  }
 }
 
 // Fetch requests queue from Server/DB
@@ -723,6 +822,9 @@ async function enterLiveRoom(stream) {
   // Pull queue data from SQLite DB
   await fetchRequestQueue(stream.id);
 
+  // Pull follow status & follower count
+  await fetchFollowStatus(stream.id);
+
   // Initialize and try playing actual live streaming
   initLiveVideo(stream.id);
 
@@ -883,6 +985,11 @@ function enterStreamerStudio() {
   liveView.classList.remove('active');
   streamerView.classList.add('active');
 
+  // Setup stream key guide
+  if (guideStreamKey) {
+    guideStreamKey.value = currentUser.username;
+  }
+
   // Setup mock layout
   document.querySelector('#streamer-view .video-container').classList.add('offline');
   studioStreamStatusText.textContent = '방송 송출 준비 완료 (오프라인)';
@@ -899,7 +1006,9 @@ function enterStreamerStudio() {
 
   // Reset allowRequests checkbox to true on entry and sync with backend
   const studioAllowRequestsCheckbox = document.getElementById('studio-allow-requests');
-  studioAllowRequestsCheckbox.checked = true;
+  if (studioAllowRequestsCheckbox) {
+    studioAllowRequestsCheckbox.checked = true;
+  }
   toggleStudioPanels(true);
 
   // Clear studio chat log and display welcome message
@@ -908,6 +1017,12 @@ function enterStreamerStudio() {
     studioChatBox.innerHTML = '';
     addChatMessage('SYSTEM', `Zupasu 스튜디오 실시간 모니터링 채팅이 개설되었습니다.`, false);
   }
+
+  // Reset active tab to Requests on entry
+  updateStudioTabs('request');
+
+  // Load initial followers list & count
+  fetchFollowersList();
 
   fetch(`/api/streams/${activeStreamer.id}/allow-requests`, {
     method: 'POST',
@@ -918,8 +1033,8 @@ function enterStreamerStudio() {
   // Fetch Requests queue from DB
   fetchStreamerRequests();
 
-  // Start polling every 3 seconds to keep streamer UI sync with viewer's requests
-  streamerPollInterval = setInterval(fetchStreamerRequests, 3000);
+  // Start integrated polling every 3 seconds to keep streamer UI in sync
+  streamerPollInterval = setInterval(pollStudioState, 3000);
 }
 
 function exitStreamerStudio() {
@@ -928,6 +1043,10 @@ function exitStreamerStudio() {
     clearInterval(streamerPollInterval);
     streamerPollInterval = null;
   }
+  
+  // Clean up studio video monitoring player
+  destroyStudioVideo();
+
   streamerView.classList.remove('active');
   lobbyView.classList.add('active');
   
@@ -1016,3 +1135,247 @@ window.deleteRequest = async function(requestId) {
     alert(err.message);
   }
 };
+
+// --- Studio Monitor Video Playback Helpers ---
+function initStudioVideo() {
+  const studioVideo = document.getElementById('studio-video-element');
+  const studioPlaceholder = document.getElementById('studio-visualizer-placeholder');
+  
+  if (!studioVideo || studioFlvPlayer) return;
+
+  if (flvjs.isSupported()) {
+    const streamUrl = `http://${window.location.hostname}:8000/Live/${currentUser.username}.flv`;
+    
+    studioFlvPlayer = flvjs.createPlayer({
+      type: 'flv',
+      url: streamUrl,
+      isLive: true,
+      cors: true,
+      enableWorker: true
+    });
+    studioFlvPlayer.attachMediaElement(studioVideo);
+    studioFlvPlayer.load();
+
+    const playPromise = studioFlvPlayer.play();
+    if (playPromise !== undefined) {
+      playPromise.then(() => {
+        studioVideo.style.display = 'block';
+        if (studioPlaceholder) studioPlaceholder.style.display = 'none';
+      }).catch(err => {
+        console.log("Studio video playback failed, waiting for stream data:", err);
+      });
+    }
+
+    studioFlvPlayer.on(flvjs.Events.ERROR, (errType, errDetail) => {
+      console.log("Studio flv.js error:", errType, errDetail);
+      studioVideo.style.display = 'none';
+      if (studioPlaceholder) studioPlaceholder.style.display = 'flex';
+    });
+  }
+}
+
+function destroyStudioVideo() {
+  const studioVideo = document.getElementById('studio-video-element');
+  const studioPlaceholder = document.getElementById('studio-visualizer-placeholder');
+
+  if (studioFlvPlayer) {
+    try {
+      studioFlvPlayer.pause();
+      studioFlvPlayer.unload();
+      studioFlvPlayer.destroy();
+    } catch (e) {
+      console.log("Error destroying studio player:", e);
+    }
+    studioFlvPlayer = null;
+  }
+
+  if (studioVideo) studioVideo.style.display = 'none';
+  if (studioPlaceholder) studioPlaceholder.style.display = 'flex';
+}
+
+// --- Integrated Studio Polling Helper ---
+async function pollStudioState() {
+  if (!activeStreamer || !currentUser) return;
+  
+  // 1. Fetch current requests queue
+  await fetchStreamerRequests();
+
+  // 2. Check and sync live broadcasting state
+  try {
+    const activeStreams = await fetchActiveStreams();
+    const myStream = activeStreams.find(s => s.id === currentUser.username);
+    
+    const monitorBox = document.querySelector('#streamer-view .video-container');
+    const studioAllowRequestsCheckbox = document.getElementById('studio-allow-requests');
+    
+    if (myStream) {
+      isBroadcasting = true;
+      if (monitorBox) monitorBox.classList.remove('offline');
+      if (studioStreamStatusText) {
+        studioStreamStatusText.textContent = `송출 중 (실시간 연결 성공) - ${myStream.title}`;
+      }
+      if (studioBroadcastToggle) {
+        studioBroadcastToggle.textContent = '방송 종료하기';
+        studioBroadcastToggle.style.backgroundColor = 'var(--danger-color)';
+        studioBroadcastToggle.style.borderColor = 'var(--danger-color)';
+      }
+      
+      // Auto sync checkbox to match backend state
+      if (studioAllowRequestsCheckbox) {
+        studioAllowRequestsCheckbox.checked = myStream.allowRequests;
+        toggleStudioPanels(myStream.allowRequests);
+      }
+
+      // Start studio monitoring play if not already playing
+      initStudioVideo();
+    } else {
+      isBroadcasting = false;
+      if (monitorBox) monitorBox.classList.add('offline');
+      if (studioStreamStatusText) {
+        studioStreamStatusText.textContent = '방송 송출 준비 완료 (오프라인)';
+      }
+      if (studioBroadcastToggle) {
+        studioBroadcastToggle.textContent = '방송 시작하기';
+        studioBroadcastToggle.style.backgroundColor = 'var(--accent-color)';
+        studioBroadcastToggle.style.borderColor = 'var(--accent-color)';
+      }
+      
+      // Clean up player since stream is offline
+      destroyStudioVideo();
+    }
+  } catch (err) {
+    console.error('스튜디오 상태 동기화 폴링 에러:', err);
+  }
+}
+
+// --- Studio Sidebar Tabs Switcher ---
+function updateStudioTabs(activeTabId) {
+  const tabs = {
+    request: {
+      btn: studioTabBtnRequest,
+      panel: studioPanelRequest
+    },
+    chat: {
+      btn: studioTabBtnChat,
+      panel: studioPanelChat
+    },
+    followers: {
+      btn: studioTabBtnFollowers,
+      panel: studioPanelFollowers
+    }
+  };
+
+  Object.keys(tabs).forEach(key => {
+    const item = tabs[key];
+    if (!item.btn || !item.panel) return;
+
+    if (key === activeTabId) {
+      item.panel.style.display = 'flex';
+      item.btn.style.borderBottomColor = 'var(--accent-color)';
+      item.btn.style.color = 'var(--text-primary)';
+      item.btn.classList.add('active');
+    } else {
+      item.panel.style.display = 'none';
+      item.btn.style.borderBottomColor = 'transparent';
+      item.btn.style.color = 'var(--text-secondary)';
+      item.btn.classList.remove('active');
+    }
+  });
+
+  if (activeTabId === 'chat') {
+    const studioChatBox = document.getElementById('studio-chat-box');
+    if (studioChatBox) studioChatBox.scrollTop = studioChatBox.scrollHeight;
+  }
+}
+
+// --- Follower System & Reactions Helpers ---
+async function fetchFollowersList() {
+  if (!activeStreamer) return;
+  try {
+    const response = await fetch(`/api/streams/${activeStreamer.id}/followers`);
+    if (!response.ok) throw new Error('팔로워 목록을 조회하지 못했습니다.');
+
+    const data = await response.json();
+    const followers = data.followers || [];
+
+    if (studioFollowersCount) {
+      studioFollowersCount.textContent = followers.length;
+    }
+
+    if (studioFollowersList) {
+      studioFollowersList.innerHTML = '';
+      if (followers.length === 0) {
+        studioFollowersList.innerHTML = `
+          <div style="text-align: center; color: var(--text-secondary); font-size: 0.85rem; padding: 2rem 0;">
+            아직 팔로우한 리스너가 없습니다.
+          </div>
+        `;
+        return;
+      }
+
+      followers.forEach(follower => {
+        const item = document.createElement('div');
+        item.className = 'request-item';
+        item.innerHTML = `
+          <div class="request-details">
+            <span class="request-title">${follower.nickname}</span>
+            <span class="request-requester">@${follower.username}</span>
+          </div>
+        `;
+        studioFollowersList.appendChild(item);
+      });
+    }
+  } catch (err) {
+    console.error(err);
+  }
+}
+
+async function fetchFollowStatus(streamerId) {
+  const userId = currentUser ? currentUser.username : '';
+  try {
+    const response = await fetch(`/api/streams/${streamerId}/follow/status?userId=${userId}`);
+    if (!response.ok) throw new Error('팔로우 상태를 조회하지 못했습니다.');
+
+    const data = await response.json();
+    updateFollowBtnUI(data.isFollowing, data.count);
+  } catch (err) {
+    console.error(err);
+  }
+}
+
+function updateFollowBtnUI(isFollowing, count) {
+  if (btnFollow) {
+    if (isFollowing) {
+      btnFollow.textContent = '팔로잉';
+      btnFollow.classList.remove('secondary-btn');
+      btnFollow.classList.add('primary-btn');
+    } else {
+      btnFollow.textContent = '팔로우';
+      btnFollow.classList.remove('primary-btn');
+      btnFollow.classList.add('secondary-btn');
+    }
+  }
+  if (liveFollowerCount) {
+    liveFollowerCount.textContent = `팔로워 ${count}명`;
+  }
+}
+
+// --- Audio Mixer Slider Sync Helper ---
+function setupStudioAudioMixer() {
+  const controls = [
+    { sliderId: 'studio-vol-vocal', valId: 'studio-vol-vocal-val' },
+    { sliderId: 'studio-vol-inst', valId: 'studio-vol-inst-val' },
+    { sliderId: 'studio-vol-mr', valId: 'studio-vol-mr-val' }
+  ];
+
+  controls.forEach(ctrl => {
+    const slider = document.getElementById(ctrl.sliderId);
+    const valueDisp = document.getElementById(ctrl.valId);
+
+    if (slider && valueDisp) {
+      slider.addEventListener('input', (e) => {
+        valueDisp.textContent = `${e.target.value}%`;
+      });
+    }
+  });
+}

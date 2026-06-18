@@ -71,6 +71,17 @@ async function initDb() {
     )
   `);
 
+  // Create Follows Table
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS follows (
+      id SERIAL PRIMARY KEY,
+      follower_id VARCHAR(50) NOT NULL,
+      streamer_id VARCHAR(50) NOT NULL,
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      UNIQUE(follower_id, streamer_id)
+    )
+  `);
+
   // Insert mock admin account if not exists
   try {
     const adminCheck = await pool.query('SELECT * FROM users WHERE username = $1', ['admin']);
@@ -307,6 +318,92 @@ app.post('/api/streams/:id/broadcast', (req, res) => {
   }
   
   res.json({ success: true, isLive: isBroadcasting });
+});
+
+// Toggle Follow (Follow/Unfollow)
+app.post('/api/streams/:id/follow', async (req, res) => {
+  const streamerId = req.params.id;
+  const { followerId } = req.body;
+
+  if (!followerId) {
+    return res.status(400).json({ error: '팔로워 정보가 필요합니다.' });
+  }
+
+  try {
+    // Check if already following
+    const followCheck = await pool.query(
+      'SELECT id FROM follows WHERE follower_id = $1 AND streamer_id = $2',
+      [followerId, streamerId]
+    );
+
+    if (followCheck.rows.length > 0) {
+      // Unfollow
+      await pool.query(
+        'DELETE FROM follows WHERE follower_id = $1 AND streamer_id = $2',
+        [followerId, streamerId]
+      );
+      res.json({ success: true, isFollowing: false });
+    } else {
+      // Follow
+      await pool.query(
+        'INSERT INTO follows (follower_id, streamer_id) VALUES ($1, $2)',
+        [followerId, streamerId]
+      );
+      res.json({ success: true, isFollowing: true });
+    }
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: '팔로우 설정 변경 실패' });
+  }
+});
+
+// Get Follow Status & Count
+app.get('/api/streams/:id/follow/status', async (req, res) => {
+  const streamerId = req.params.id;
+  const userId = req.query.userId; // logged in username
+
+  try {
+    let isFollowing = false;
+    if (userId) {
+      const followCheck = await pool.query(
+        'SELECT id FROM follows WHERE follower_id = $1 AND streamer_id = $2',
+        [userId, streamerId]
+      );
+      isFollowing = followCheck.rows.length > 0;
+    }
+
+    // Get Total Follower Count
+    const countResult = await pool.query(
+      'SELECT COUNT(id) FROM follows WHERE streamer_id = $1',
+      [streamerId]
+    );
+    const count = parseInt(countResult.rows[0].count);
+
+    res.json({ success: true, isFollowing, count });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: '팔로우 정보 조회 실패' });
+  }
+});
+
+// Get Followers List for a streamer
+app.get('/api/streams/:id/followers', async (req, res) => {
+  const streamerId = req.params.id;
+
+  try {
+    const result = await pool.query(
+      `SELECT f.follower_id as username, COALESCE(u.nickname, f.follower_id) as nickname 
+       FROM follows f 
+       LEFT JOIN users u ON f.follower_id = u.username 
+       WHERE f.streamer_id = $1 
+       ORDER BY f.created_at DESC`,
+      [streamerId]
+    );
+    res.json({ success: true, followers: result.rows });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: '팔로워 리스트 조회 실패' });
+  }
 });
 
 // Start Server first, then try initializing DB and RTMP Media Server in background
