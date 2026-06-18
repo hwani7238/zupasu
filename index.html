@@ -215,18 +215,41 @@
           </div>
         </div>
 
-        <!-- Right Panel: Requests Dashboard -->
-        <div class="sidebar">
-          <div class="sidebar-tabs" style="border-bottom: 1px solid var(--border-color);">
-            <div style="flex: 1; padding: 1rem 0; font-size: 0.85rem; font-weight: 600; text-align: center; color: var(--text-primary);">
-              신청곡 관리판 (<span id="studio-queue-count">0</span>)
+        <!-- Right Panel: Requests / Chat Dashboard -->
+        <div class="sidebar" id="studio-sidebar">
+          
+          <!-- 1. Song Requests Panel (Shown when allowRequests is true) -->
+          <div id="studio-panel-request" class="studio-tab-panel active" style="display: flex; flex-direction: column; height: 100%;">
+            <div class="sidebar-tabs" style="border-bottom: 1px solid var(--border-color);">
+              <div style="flex: 1; padding: 1rem 0; font-size: 0.85rem; font-weight: 600; text-align: center; color: var(--text-primary);">
+                신청곡 관리판 (<span id="studio-queue-count">0</span>)
+              </div>
+            </div>
+            <div class="sidebar-content" style="flex: 1; overflow-y: auto;">
+              <div class="request-list" id="studio-request-list">
+                <!-- Dynamically loaded in app.js -->
+              </div>
             </div>
           </div>
-          <div class="sidebar-content">
-            <div class="request-list" id="studio-request-list">
-              <!-- Dynamically loaded in app.js -->
+
+          <!-- 2. Live Chat Panel (Shown when allowRequests is false) -->
+          <div id="studio-panel-chat" class="studio-tab-panel" style="display: none; flex-direction: column; height: 100%;">
+            <div class="sidebar-tabs" style="border-bottom: 1px solid var(--border-color);">
+              <div style="flex: 1; padding: 1rem 0; font-size: 0.85rem; font-weight: 600; text-align: center; color: var(--text-primary);">
+                스튜디오 실시간 채팅
+              </div>
+            </div>
+            <div class="sidebar-content" style="flex: 1; display: flex; flex-direction: column; justify-content: space-between; overflow: hidden; padding: 0;">
+              <div class="chat-messages" id="studio-chat-box" style="flex: 1; padding: 1rem; overflow-y: auto;">
+                <!-- Chat Bubbles synced with app.js -->
+              </div>
+              <form class="chat-input-area" id="studio-chat-form" style="padding: 1rem; border-top: 1px solid var(--border-color); display: flex; gap: 0.5rem;">
+                <input type="text" id="studio-chat-input" placeholder="스튜디오에서 메시지 전송..." autocomplete="off" style="flex: 1; background-color: var(--bg-secondary); border: 1px solid var(--border-color); color: var(--text-primary); padding: 0.5rem 0.75rem; font-size: 0.9rem; outline: none;">
+                <button type="submit" class="primary-btn">전송</button>
+              </form>
             </div>
           </div>
+
         </div>
       </div>
     </section>

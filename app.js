@@ -458,6 +458,7 @@ function setupEventListeners() {
   // Toggle Song Request status from streamer studio checkbox
   const studioAllowRequests = document.getElementById('studio-allow-requests');
   studioAllowRequests.addEventListener('change', async (e) => {
+    toggleStudioPanels(e.target.checked);
     if (!activeStreamer) return;
     try {
       await fetch(`/api/streams/${activeStreamer.id}/allow-requests`, {
@@ -469,6 +470,21 @@ function setupEventListeners() {
       console.error(err);
     }
   });
+
+  // Handle Streamer Studio Chat Submit
+  const studioChatForm = document.getElementById('studio-chat-form');
+  const studioChatInput = document.getElementById('studio-chat-input');
+  if (studioChatForm) {
+    studioChatForm.addEventListener('submit', (e) => {
+      e.preventDefault();
+      const text = studioChatInput.value.trim();
+      if (!text) return;
+      
+      const nickname = currentUser ? currentUser.nickname : '스트리머';
+      addChatMessage(nickname, text, false, true);
+      studioChatInput.value = '';
+    });
+  }
 }
 
 // Fetch requests queue from Server/DB
@@ -539,6 +555,27 @@ function toggleRequestTab(allowRequests) {
       chatTabBtn.classList.add('active');
       requestPanel.classList.remove('active');
       chatPanel.classList.add('active');
+    }
+  }
+}
+
+// Streamer Studio Sidebar Panel Toggle (Show requests queue vs chat box)
+function toggleStudioPanels(allowRequests) {
+  const requestPanel = document.getElementById('studio-panel-request');
+  const chatPanel = document.getElementById('studio-panel-chat');
+  
+  if (requestPanel && chatPanel) {
+    if (allowRequests) {
+      requestPanel.style.display = 'flex';
+      chatPanel.style.display = 'none';
+    } else {
+      requestPanel.style.display = 'none';
+      chatPanel.style.display = 'flex';
+      
+      const studioChatBox = document.getElementById('studio-chat-box');
+      if (studioChatBox) {
+        studioChatBox.scrollTop = studioChatBox.scrollHeight;
+      }
     }
   }
 }
@@ -769,38 +806,54 @@ function updateQueueCount() {
   queueCountSpan.textContent = requestQueue.length;
 }
 
-// Add chat bubble
+// Add chat bubble (adds to both viewer chat and streamer studio chat if elements exist)
 function addChatMessage(author, text, isDonation = false, isStreamer = false, donationAmount = '') {
-  const bubble = document.createElement('div');
-  bubble.className = isDonation ? 'chat-bubble chat-donation' : 'chat-bubble';
+  // Helper to construct bubble DOM
+  function createBubble() {
+    const bubble = document.createElement('div');
+    bubble.className = isDonation ? 'chat-bubble chat-donation' : 'chat-bubble';
 
-  const authorSpan = document.createElement('span');
-  authorSpan.className = 'chat-author';
-  authorSpan.textContent = author;
-  
-  if (isStreamer) {
-    authorSpan.style.color = 'var(--live-color)';
-    authorSpan.textContent = `🎤 ${author}`;
+    const authorSpan = document.createElement('span');
+    authorSpan.className = 'chat-author';
+    authorSpan.textContent = author;
+    
+    if (isStreamer) {
+      authorSpan.style.color = 'var(--live-color)';
+      authorSpan.textContent = `🎤 ${author}`;
+    }
+
+    bubble.appendChild(authorSpan);
+
+    if (isDonation) {
+      const amountSpan = document.createElement('span');
+      amountSpan.className = 'donation-amount';
+      amountSpan.textContent = donationAmount;
+      bubble.appendChild(amountSpan);
+    }
+
+    const textSpan = document.createElement('span');
+    textSpan.className = 'chat-text';
+    textSpan.textContent = ` ${text}`;
+    bubble.appendChild(textSpan);
+    
+    return bubble;
   }
 
-  bubble.appendChild(authorSpan);
-
-  if (isDonation) {
-    const amountSpan = document.createElement('span');
-    amountSpan.className = 'donation-amount';
-    amountSpan.textContent = donationAmount;
-    bubble.appendChild(amountSpan);
+  // Sync to viewer chat
+  const chatBox = document.getElementById('chat-box');
+  if (chatBox) {
+    const bubble = createBubble();
+    chatBox.appendChild(bubble);
+    chatBox.scrollTop = chatBox.scrollHeight;
   }
 
-  const textSpan = document.createElement('span');
-  textSpan.className = 'chat-text';
-  textSpan.textContent = ` ${text}`;
-  bubble.appendChild(textSpan);
-
-  chatBox.appendChild(bubble);
-  
-  // Auto scroll to bottom
-  chatBox.scrollTop = chatBox.scrollHeight;
+  // Sync to streamer studio chat
+  const studioChatBox = document.getElementById('studio-chat-box');
+  if (studioChatBox) {
+    const bubble = createBubble();
+    studioChatBox.appendChild(bubble);
+    studioChatBox.scrollTop = studioChatBox.scrollHeight;
+  }
 }
 
 // --- Streamer Studio Business Logic ---
@@ -829,6 +882,15 @@ function enterStreamerStudio() {
   // Reset allowRequests checkbox to true on entry and sync with backend
   const studioAllowRequestsCheckbox = document.getElementById('studio-allow-requests');
   studioAllowRequestsCheckbox.checked = true;
+  toggleStudioPanels(true);
+
+  // Clear studio chat log and display welcome message
+  const studioChatBox = document.getElementById('studio-chat-box');
+  if (studioChatBox) {
+    studioChatBox.innerHTML = '';
+    addChatMessage('SYSTEM', `Zupasu 스튜디오 실시간 모니터링 채팅이 개설되었습니다.`, false);
+  }
+
   fetch(`/api/streams/${activeStreamer.id}/allow-requests`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
