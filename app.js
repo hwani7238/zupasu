@@ -138,7 +138,7 @@ const studioQueueCount = document.getElementById('studio-queue-count');
 
 // Initialize Platform
 document.addEventListener('DOMContentLoaded', () => {
-  loadStreams('all');
+  startLobbyPolling();
   checkUserSession();
   setupEventListeners();
   updateQueueCount();
@@ -479,21 +479,60 @@ async function fetchRequestQueue(streamerId) {
   }
 }
 
+// Fetch active streams from server
+async function fetchActiveStreams() {
+  try {
+    const response = await fetch('/api/streams/active');
+    if (!response.ok) throw new Error('활성 스트리머 조회 실패');
+    const data = await response.json();
+    return data.activeStreams;
+  } catch (err) {
+    console.error(err);
+    return [];
+  }
+}
+
+// Lobby polling management
+let lobbyInterval = null;
+
+function startLobbyPolling() {
+  if (lobbyInterval) return;
+  
+  // Set up periodic poll every 5 seconds
+  lobbyInterval = setInterval(() => {
+    const activeChip = document.querySelector('.genre-chip.active');
+    const currentGenre = activeChip ? activeChip.dataset.genre : 'all';
+    loadStreams(currentGenre);
+  }, 5000);
+}
+
+function stopLobbyPolling() {
+  if (lobbyInterval) {
+    clearInterval(lobbyInterval);
+    lobbyInterval = null;
+  }
+}
+
 // Load Streamers inside lobby
-function loadStreams(genreFilter) {
+async function loadStreams(genreFilter) {
+  const activeStreams = await fetchActiveStreams();
+  
   streamGrid.innerHTML = '';
   const filtered = genreFilter === 'all' 
     ? STREAMERS 
     : STREAMERS.filter(s => s.genre === genreFilter);
 
   filtered.forEach(stream => {
+    const isLive = activeStreams.includes(stream.id);
     const card = document.createElement('div');
-    card.className = 'stream-card';
+    card.className = `stream-card ${isLive ? 'is-live' : 'is-offline'}`;
     card.innerHTML = `
       <div class="card-thumbnail">
         <img src="${stream.thumbnail}" alt="${stream.artist}" onerror="this.src='data:image/svg+xml;utf8,<svg xmlns=%22http://www.w3.org/2000/svg%22 width=%22100%22 height=%22100%22><rect width=%22100%25%22 height=%22100%25%22 fill=%22%23222%22/><text x=%2250%25%22 y=%2250%25%22 dominant-baseline=%22middle%22 text-anchor=%22middle%22 fill=%22%23555%22 font-family=%22sans-serif%22 font-size=%2212%22>${stream.artist}</text></svg>'">
-        <span class="live-badge">LIVE</span>
-        <span class="viewer-count">${stream.viewers.toLocaleString()}명 감상 중</span>
+        ${isLive 
+          ? '<span class="live-badge">LIVE</span>' 
+          : '<span class="offline-badge">OFFLINE</span>'}
+        <span class="viewer-count">${isLive ? `${stream.viewers.toLocaleString()}명 감상 중` : '오프라인'}</span>
       </div>
       <div class="card-info">
         <div class="card-meta">
@@ -555,6 +594,8 @@ function initLiveVideo(streamerId) {
 
 // Enter Live Room Page
 async function enterLiveRoom(stream) {
+  stopLobbyPolling();
+  
   activeStreamer = stream;
   lobbyView.classList.remove('active');
   liveView.classList.add('active');
@@ -604,6 +645,8 @@ function exitLiveRoom() {
   liveView.classList.remove('active');
   lobbyView.classList.add('active');
   stopChatSimulation();
+  
+  startLobbyPolling();
 }
 
 // Chat simulation logic
@@ -694,6 +737,8 @@ function addChatMessage(author, text, isDonation = false, isStreamer = false, do
 // --- Streamer Studio Business Logic ---
 
 function enterStreamerStudio() {
+  stopLobbyPolling();
+  
   lobbyView.classList.remove('active');
   liveView.classList.remove('active');
   streamerView.classList.add('active');
@@ -727,6 +772,8 @@ function exitStreamerStudio() {
   }
   streamerView.classList.remove('active');
   lobbyView.classList.add('active');
+  
+  startLobbyPolling();
 }
 
 // Fetch requests queue for current streamer

@@ -238,6 +238,36 @@ app.delete('/api/streams/:id/requests/:requestId', async (req, res) => {
   }
 });
 
+// Global store for active RTMP streams
+const activeStreams = new Set();
+
+// Node Media Server Event Handlers
+nms.on('postPublish', (id, StreamPath, args) => {
+  console.log('[NodeMediaServer] postPublish', StreamPath);
+  const parts = StreamPath.split('/');
+  // StreamPath format is usually /Live/streamerId or /live/streamerId
+  if (parts.length >= 3 && parts[1].toLowerCase() === 'live') {
+    const streamerId = parts[2];
+    activeStreams.add(streamerId);
+    console.log(`[Stream Started] Streamer "${streamerId}" is now LIVE.`);
+  }
+});
+
+nms.on('donePublish', (id, StreamPath, args) => {
+  console.log('[NodeMediaServer] donePublish', StreamPath);
+  const parts = StreamPath.split('/');
+  if (parts.length >= 3 && parts[1].toLowerCase() === 'live') {
+    const streamerId = parts[2];
+    activeStreams.delete(streamerId);
+    console.log(`[Stream Ended] Streamer "${streamerId}" is now OFFLINE.`);
+  }
+});
+
+// API to get active streams
+app.get('/api/streams/active', (req, res) => {
+  res.json({ activeStreams: Array.from(activeStreams) });
+});
+
 // Start Server first, then try initializing DB and RTMP Media Server in background
 app.listen(PORT, () => {
   console.log(`Whee Music web server running at http://localhost:${PORT}`);
